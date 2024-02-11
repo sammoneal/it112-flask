@@ -1,5 +1,7 @@
 import os, json
 from flask import Flask, render_template, url_for, request
+from flask_admin import Admin
+from flask_admin.contrib.sqla import ModelView
 from models import db, Recipe, Category
 from utils import movie_stars
 from default_data import create_default_data
@@ -108,14 +110,15 @@ def users():
     return render_template("users.html", **payload)
 
 
-@app.route("/user/<int:id>")
-def user(id):
+@app.route("/user/<int:user_id>")
+def user(user_id):
     with open("test.json") as json_file:
         user_data = json.load(json_file)
         try:
+            id = user_id - 1
             this_user = user_data[id]
         except IndexError:
-            return "User not found", 404
+            return render_template("404.html", title="404")
     context = {"title": "User", "user": this_user}
     return render_template("user.html", **context)
 
@@ -131,17 +134,25 @@ def recipes():
 @app.route("/recipe/<int:recipe_id>")
 def recipe(recipe_id):
     this_recipe = Recipe.query.get(recipe_id)
-    title = "Recipe"
     context = {"title": "Recipe", "recipe": this_recipe}
     if this_recipe:
         return render_template("recipe.html", **context)
     else:
-        return render_template("404.html", title="404"), 404
+        return render_template("404.html", title="404")
 
 
 with app.app_context():
     db.create_all()
     create_default_data(db, Recipe, Category)
 
+class RecipeView(ModelView):
+  column_searchable_list = ['name', 'author']
 
-app.run(host="0.0.0.0", port=81)
+admin = Admin(app)
+admin.url = '/admin/' #would not work on repl w/o this!
+admin.add_view(RecipeView(Recipe, db.session))
+admin.add_view(ModelView(Category, db.session))
+
+
+
+app.run(host="0.0.0.0", port=81, debug=True)
