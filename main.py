@@ -1,8 +1,9 @@
 import os, json
-from flask import Flask, render_template, url_for, request
+from flask import Flask, render_template, url_for, request, redirect, flash
 from flask_admin import Admin
 from flask_admin.contrib.sqla import ModelView
 from models import db, Recipe, Category
+from forms import RecipeAdd
 from utils import movie_stars
 from default_data import create_default_data
 
@@ -44,6 +45,9 @@ MOVIE_DATA = [
 rated_movies = movie_stars(MOVIE_DATA)
 
 
+# Simple Routes
+
+
 @app.route("/")
 def index():
     title = "Jinja Home"
@@ -77,6 +81,9 @@ def movies():
     return render_template("movies.html", **payload)
 
 
+# Register
+
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     title = "Register"
@@ -97,6 +104,9 @@ def register_data(form_data):
             value = value.title()
         feedback.append(f"{key.replace('_',' ')}: {value}")
     return feedback
+
+
+# Users List Vies
 
 
 @app.route("/users")
@@ -123,6 +133,9 @@ def user(user_id):
     return render_template("user.html", **context)
 
 
+# Recipe CRUD
+
+
 @app.route("/recipes")
 def recipes():
     all_recipes = Recipe.query.all()
@@ -133,7 +146,7 @@ def recipes():
 
 @app.route("/recipe/<int:recipe_id>")
 def recipe(recipe_id):
-    this_recipe = Recipe.query.get(recipe_id)
+    this_recipe = db.session.get(Recipe, recipe_id)
     context = {"title": "Recipe", "recipe": this_recipe}
     if this_recipe:
         return render_template("recipe.html", **context)
@@ -141,18 +154,57 @@ def recipe(recipe_id):
         return render_template("404.html", title="404")
 
 
+@app.route("/add_recipe", methods=["GET", "POST"])
+def add_recipe():
+    form = RecipeAdd()
+
+    # Populate the category choices dynamically
+    form.category_id.choices = [
+        (category.id, category.name) for category in Category.query.all()
+    ]
+
+    if request.method == "POST" and form.validate_on_submit():
+        # Create a new recipe instance and add it to the database
+        new_recipe = Recipe(
+            name=form.name.data,
+            author=form.author.data,
+            description=form.description.data,
+            ingredients=form.ingredients.data,
+            instructions=form.instructions.data,
+            rating=form.rating.data,
+            category_id=form.category_id.data,
+        )
+        db.session.add(new_recipe)
+        db.session.commit()
+
+        # inform user of success!
+        flash("Recipe added successfully!", "success")
+        return redirect(url_for("recipes"))
+
+    # form did NOT validate
+    if request.method == "POST" and not form.validate():
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f"Error in {field}: {error}", "error")
+        return render_template("add_recipe.html", form=form)
+
+    # default via GET shows form
+    return render_template("add_recipe.html", form=form)
+
+
 with app.app_context():
     db.create_all()
     create_default_data(db, Recipe, Category)
 
+
 class RecipeView(ModelView):
-  column_searchable_list = ['name', 'author']
+    column_searchable_list = ["name", "author"]
+
 
 admin = Admin(app)
-admin.url = '/admin/' #would not work on repl w/o this!
+admin.url = "/admin/"  # would not work on repl w/o this!
 admin.add_view(RecipeView(Recipe, db.session))
 admin.add_view(ModelView(Category, db.session))
-
 
 
 app.run(host="0.0.0.0", port=81, debug=True)
