@@ -2,14 +2,17 @@ import os, json
 from flask import Flask, render_template, url_for, request, redirect, flash
 from flask_admin import Admin
 from flask_admin.contrib.sqla import ModelView
+from flask_wtf import CSRFProtect
 from models import db, Recipe, Category
-from forms import RecipeAdd
+from forms import RecipeAdd, RecipeEdit
 from utils import movie_stars
 from default_data import create_default_data
 
 app = Flask(__name__)
 
 app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", "default_secret_key")
+
+csrf = CSRFProtect(app)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///recipes.db"
 db.init_app(app)
@@ -190,6 +193,42 @@ def add_recipe():
 
     # default via GET shows form
     return render_template("add_recipe.html", form=form)
+
+
+@app.route("/edit_recipe/<int:recipe_id>", methods=["GET", "POST"])
+def edit_recipe(recipe_id):
+    # Retrieve the recipe from the database
+    recipe = Recipe.query.get_or_404(recipe_id)
+    form = RecipeEdit(obj=recipe)
+
+    # Populate categories in the form
+    form.category_id.choices = [
+        (category.id, category.name) for category in Category.query.all()
+    ]
+
+    if request.method == "POST" and form.validate_on_submit():
+        form.populate_obj(recipe)  # Update the recipe object with form data
+        db.session.commit()
+        flash("Recipe updated successfully!", "success")
+        return redirect(url_for("recipes"))
+
+    # form did NOT validate
+    if request.method == "POST" and not form.validate():
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f"Error in {field}: {error}", "error")
+        return render_template("edit_recipe.html", form=form, recipe=recipe)
+
+    return render_template("edit_recipe.html", form=form, recipe=recipe)
+
+
+@app.route("/delete_recipe/<int:recipe_id>", methods=["POST"])
+def delete_recipe(recipe_id):
+    recipe = Recipe.query.get_or_404(recipe_id)
+    db.session.delete(recipe)
+    db.session.commit()
+    flash("Recipe deleted successfully!", "success")
+    return redirect(url_for("recipes"))
 
 
 with app.app_context():
