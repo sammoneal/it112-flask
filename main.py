@@ -13,7 +13,7 @@ from werkzeug.security import generate_password_hash
 from flask_wtf import CSRFProtect
 from email_validator import validate_email, EmailNotValidError
 from models import db, Recipe, Category, Chef
-from forms import RecipeAdd, RecipeEdit, LoginForm, RegistrationForm
+from forms import RecipeAdd, RecipeEdit, LoginForm, RegistrationForm, RecipePicForm
 from utils import movie_stars
 from default_data import create_default_data
 
@@ -30,6 +30,11 @@ db.init_app(app)
 login_manager = LoginManager()
 login_manager.login_view = "login"
 login_manager.init_app(app)
+
+# Set the upload folder for recipe pictures
+UPLOAD_FOLDER = "static/recipe_pic"
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
 
 MOVIE_DATA = [
     {
@@ -315,6 +320,19 @@ def delete_recipe(recipe_id):
     db.session.commit()
     flash("Recipe deleted successfully!", "success")
     return redirect(url_for("recipes"))
+
+
+# RECIPE_PIC
+@app.route("/recipe_pic/<int:recipe_id>", methods=["GET", "POST"])
+def recipe_pic(recipe_id):
+    form = RecipePicForm()  # Instantiate the form
+    if form.validate_on_submit():
+        # Save the uploaded file
+        file = form.picture.data
+        filename = f"recipe_{recipe_id}.jpg"
+        file.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
+        return redirect(url_for("recipe", recipe_id=recipe_id))
+    return render_template("recipe_pic.html", form=form)
 
 
 with app.app_context():
